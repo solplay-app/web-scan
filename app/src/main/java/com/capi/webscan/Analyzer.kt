@@ -100,6 +100,10 @@ object Analyzer {
                 if (weakHits.isNotEmpty()) add(minOf(3 * weakHits.size, 9),
                     "Formules d'urgence/pression (${weakHits.size}) : ${weakHits.take(5).joinToString(" | ")}")
                 Rules.JS_PATTERNS.forEach { (re, msg, strong) -> if (re.containsMatchIn(html)) add(10, msg, strong) }
+                val dl = Regex("href=[\"']([^\"']+?\\.(apk|xapk|exe|msi|scr|bat|jar|dmg|vbs|ps1))(\\?[^\"']*)?[\"']", RegexOption.IGNORE_CASE)
+                    .findAll(html).map { it.groupValues[2].lowercase() }.toSet()
+                if (dl.isNotEmpty()) add(if ("apk" in dl || "xapk" in dl) 15 else 10,
+                    "Le site propose le téléchargement de fichier(s) exécutable(s) : ${dl.joinToString(", ")} (analysez-les dans l'onglet Fichier)")
                 val imgs = Regex("<img[^>]+src=[\"']([^\"']+)[\"']", RegexOption.IGNORE_CASE).findAll(html).map { it.groupValues[1].lowercase() }.toList()
                 for (b in Rules.BRANDS) {
                     if (b.length < 5 || label.contains(b)) continue
@@ -111,9 +115,11 @@ object Analyzer {
 
             // 4. Âge du domaine, certificat, VirusTotal
             step("Âge du domaine (RDAP)…")
-            val age = Net.domainAge(reg)
+            val shared = Rules.isShared(reg)
+            val age = if (shared) null else Net.domainAge(reg)
             val young = age != null && age.ageDays < 90
-            if (age != null) {
+            if (shared) add(8, "Hébergé sur une plateforme gratuite ($tldFull) : n'importe qui peut y publier, l'âge du domaine n'est pas significatif")
+            else if (age != null) {
                 when {
                     age.ageDays < 30 -> add(40, "Domaine enregistré il y a ${age.ageDays} jours (< 30 j)", true)
                     age.ageDays < 90 -> add(30, "Domaine récent : ${age.ageDays} jours (< 90 j)", true)
@@ -134,8 +140,8 @@ object Analyzer {
             }
 
             step("VirusTotal…")
-            val vt = Net.virusTotal(reg, vtKey)
-            if (vt != null && vt > 0) add(minOf(40, vt * 10), "VirusTotal : $vt moteur(s) le signalent comme malveillant", true)
+            val vt = Net.virusTotal(if (shared) host else reg, vtKey)
+            if (vt != null && vt.flagged > 0) add(minOf(40, vt.flagged * 10), "VirusTotal : ${vt.flagged} moteur(s) sur ${vt.total} le signalent", true)
 
             // 5. Score
             val rawSum = findings.sumOf { it.points }
@@ -144,7 +150,7 @@ object Analyzer {
             Report(
                 target = url.toString(), score = score, raw = rawSum, capped = capped, level = Level.of(score),
                 findings = findings.sortedByDescending { it.points },
-                tech = Tech(host, reg, title, finalUrl, age, cert, unknown3rd, vt, deep)
+                tech = Tech(host, reg, title, finalUrl, age, cert, unknown3rd, vt, deep, shared)
             )
         }
 }

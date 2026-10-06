@@ -39,7 +39,15 @@ object Rules {
         RegexOption.IGNORE_CASE
     )
     val AD_NET = Regex("bit\\.ly|shorte|adfly|onclick|propeller|popads|adcash|exoclick", RegexOption.IGNORE_CASE)
-    val SECOND_LEVEL = setOf(
+    // Plateformes où n'importe qui publie un sous-domaine : le "domaine" réel est le sous-domaine
+    val PLATFORMS = setOf(
+        "netlify.app","vercel.app","github.io","pages.dev","workers.dev","web.app","firebaseapp.com",
+        "herokuapp.com","onrender.com","glitch.me","repl.co","surge.sh","blogspot.com","wixsite.com",
+        "weebly.com","000webhostapp.com","infinityfreeapp.com","netlify.com","fly.dev","railway.app","framer.app"
+    )
+    fun isShared(reg: String) = parts3(reg)
+    private fun parts3(reg: String) = PLATFORMS.any { reg.endsWith(".$it") }
+    val SECOND_LEVEL = PLATFORMS + setOf(
         "co.uk","org.uk","ac.uk","com.br","com.au","co.jp","co.za","com.tr","com.cn","co.in","co.ci",
         "com.ng","com.mx","co.nz","com.ar"
     )

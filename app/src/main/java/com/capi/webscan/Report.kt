@@ -14,13 +14,14 @@ enum class Level(val label: String, val color: Long) {
 
 data class Tech(
     val host: String, val registrable: String, val title: String?, val finalUrl: String?,
-    val domain: DomainAge?, val cert: CertInfo?, val unknownThirdParties: Int?, val vtMalicious: Int?, val deep: Boolean
+    val domain: DomainAge?, val cert: CertInfo?, val unknownThirdParties: Int?, val vt: VtResult?, val deep: Boolean, val shared: Boolean
 )
 
 data class Report(
     val target: String, val score: Int, val raw: Int, val capped: Boolean,
     val level: Level, val findings: List<Finding>, val tech: Tech
 ) {
+    val threats: List<ThreatGroup> get() = groupThreats(tech.vt)
     val headline: String get() = when (level) {
         Level.HIGH -> "Ce site présente de nombreux signaux typiques des faux sites et arnaques."
         Level.ELEVATED -> "Plusieurs signaux d'alerte : ce site demande une vérification sérieuse avant toute action."
@@ -44,5 +45,7 @@ fun Report.shareText(): String = buildString {
     appendLine(headline); appendLine()
     findings.sortedByDescending { it.points }.forEach { appendLine("[+${it.points}]${if (it.strong) " ★" else ""} ${it.message}") }
     if (capped) appendLine("\n(Score brut $raw plafonné à 39 : aucun signal fort.)")
+    threats.forEach { g -> appendLine("\nMenace : ${g.info.title} (${g.engines.size} moteur(s) : ${g.engines.joinToString(", ")})")
+        g.info.capabilities.forEach { appendLine(" - $it") } }
     appendLine("\nScore indicatif, pas une preuve.")
 }

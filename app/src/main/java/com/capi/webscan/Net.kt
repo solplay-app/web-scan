@@ -18,6 +18,8 @@ import javax.net.ssl.X509TrustManager
 
 data class HttpResult(val status: Int, val body: String)
 data class DomainAge(val ageDays: Long, val registered: String, val expiry: String?, val registrar: String, val masked: Boolean)
+data class VtDetection(val engine: String, val category: String, val result: String)
+data class VtResult(val flagged: Int, val total: Int, val detections: List<VtDetection>, val reputation: Int?, val link: String)
 data class CertInfo(val issuer: String, val ageDays: Long, val lifetimeDays: Long)
 
 object Net {
@@ -103,13 +105,27 @@ object Net {
         )
     } catch (_: Exception) { null }
 
-    fun virusTotal(domain: String, key: String?): Int? {
+    fun virusTotal(domain: String, key: String?): VtResult? {
         if (key.isNullOrBlank()) return null
         return try {
             val r = get("https://www.virustotal.com/api/v3/domains/$domain", mapOf("x-apikey" to key.trim())) ?: return null
             if (r.status != 200) return null
-            val s = JSONObject(r.body).getJSONObject("data").getJSONObject("attributes").optJSONObject("last_analysis_stats")
-            (s?.optInt("malicious") ?: 0) + (s?.optInt("phishing") ?: 0) + (s?.optInt("suspicious") ?: 0)
+            val a = JSONObject(r.body).getJSONObject("data").getJSONObject("attributes")
+            val s = a.optJSONObject("last_analysis_stats")
+            val mal = s?.optInt("malicious") ?: 0
+            val sus = s?.optInt("suspicious") ?: 0
+            val total = mal + sus + (s?.optInt("harmless") ?: 0) + (s?.optInt("undetected") ?: 0)
+            val dets = mutableListOf<VtDetection>()
+            a.optJSONObject("last_analysis_results")?.let { res ->
+                res.keys().forEach { k ->
+                    val o = res.optJSONObject(k) ?: return@forEach
+                    val cat = o.optString("category")
+                    if (cat == "malicious" || cat == "suspicious")
+                        dets.add(VtDetection(o.optString("engine_name", k), cat, o.optString("result")))
+                }
+            }
+            VtResult(mal + sus, total, dets, if (a.has("reputation")) a.optInt("reputation") else null,
+                "https://www.virustotal.com/gui/domain/$domain")
         } catch (_: Exception) { null }
     }
 }
